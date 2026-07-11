@@ -1,5 +1,5 @@
 package domain
 
 type GeminiService interface {
-	AskGemini(req *AskGeminiRequest) (*AskGeminiResponse, error)
+	AskGemini(req *MakePromptRequest) (*MakePromptResponse, error)
 }

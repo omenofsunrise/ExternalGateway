@@ -23,7 +23,7 @@ func NewGatewayHandler(geminiService domain.GeminiService) *GatewayHandler {
 func (h *GatewayHandler) AskGemini(ctx context.Context, req *pb.AskGeminiRequest) (*pb.AskGeminiResponse, error) {
 	log.Printf("Received AskGemini request with prompt: %s", req.Prompt)
 
-	domainReq := &domain.AskGeminiRequest{
+	domainReq := &domain.MakePromptRequest{
 		Prompt: req.Prompt,
 	}
 

@@ -2,11 +2,11 @@ package domain
 
 import "external-gateway/internal/adapter/gemini"
 
-type AskGeminiRequest struct {
+type MakePromptRequest struct {
 	Prompt string
 }
 
-type AskGeminiResponse struct {
+type MakePromptResponse struct {
 	Content string
 	Success bool
 }

@@ -32,9 +32,9 @@ func NewGeminiService(client *gemini.Client, config *GeminiServiceConfig) *Gemin
 	}
 }
 
-func (s *GeminiService) AskGemini(req *domain.AskGeminiRequest) (*domain.AskGeminiResponse, error) {
+func (s *GeminiService) AskGemini(req *domain.MakePromptRequest) (*domain.MakePromptResponse, error) {
 	if req.Prompt == "" {
-		return &domain.AskGeminiResponse{
+		return &domain.MakePromptResponse{
 			Content: "",
 			Success: false,
 		}, fmt.Errorf("prompt cannot be empty")
@@ -68,15 +68,15 @@ func (s *GeminiService) AskGemini(req *domain.AskGeminiRequest) (*domain.AskGemi
 	tokens, _ := s.geminiClient.CountTokens(context.Background(), req.Prompt, opts...)
 	fmt.Printf("Used tokens: %d\n", tokens)
 
-	return &domain.AskGeminiResponse{
+	return &domain.MakePromptResponse{
 		Content: text,
 		Success: true,
 	}, nil
 }
 
-func (s *GeminiService) AskGeminiWithHistory(req *domain.AskGeminiRequest, history []domain.ChatMessage) (*domain.AskGeminiResponse, error) {
+func (s *GeminiService) AskGeminiWithHistory(req *domain.MakePromptRequest, history []domain.ChatMessage) (*domain.MakePromptResponse, error) {
 	if req.Prompt == "" {
-		return &domain.AskGeminiResponse{
+		return &domain.MakePromptResponse{
 			Content: "",
 			Success: false,
 		}, fmt.Errorf("prompt cannot be empty")
@@ -118,13 +118,13 @@ func (s *GeminiService) AskGeminiWithHistory(req *domain.AskGeminiRequest, histo
 		return s.handleEmptyResponse(resp)
 	}
 
-	return &domain.AskGeminiResponse{
+	return &domain.MakePromptResponse{
 		Content: text,
 		Success: true,
 	}, nil
 }
 
-func (s *GeminiService) AskGeminiStream(req *domain.AskGeminiRequest) (<-chan string, <-chan error, error) {
+func (s *GeminiService) AskGeminiStream(req *domain.MakePromptRequest) (<-chan string, <-chan error, error) {
 	if req.Prompt == "" {
 		return nil, nil, fmt.Errorf("prompt cannot be empty")
 	}
@@ -182,28 +182,28 @@ func (s *GeminiService) AskGeminiStream(req *domain.AskGeminiRequest) (<-chan st
 	return textChan, errChan, nil
 }
 
-func (s *GeminiService) handleError(err error) (*domain.AskGeminiResponse, error) {
+func (s *GeminiService) handleError(err error) (*domain.MakePromptResponse, error) {
 	if geminiErr, ok := err.(*gemini.GeminiError); ok {
-		return &domain.AskGeminiResponse{
+		return &domain.MakePromptResponse{
 			Content: fmt.Sprintf("Gemini API error: %s", geminiErr.Message),
 			Success: false,
 		}, err
 	}
-	return &domain.AskGeminiResponse{
+	return &domain.MakePromptResponse{
 		Content: fmt.Sprintf("Error: %v", err),
 		Success: false,
 	}, err
 }
 
-func (s *GeminiService) handleEmptyResponse(resp *gemini.GenerateContentResponse) (*domain.AskGeminiResponse, error) {
+func (s *GeminiService) handleEmptyResponse(resp *gemini.GenerateContentResponse) (*domain.MakePromptResponse, error) {
 	if resp.PromptFeedback != nil && resp.PromptFeedback.BlockReason != "" {
 		msg := fmt.Sprintf("Prompt blocked: %s", resp.PromptFeedback.BlockReason)
-		return &domain.AskGeminiResponse{
+		return &domain.MakePromptResponse{
 			Content: msg,
 			Success: false,
 		}, fmt.Errorf(msg)
 	}
-	return &domain.AskGeminiResponse{
+	return &domain.MakePromptResponse{
 		Content: "Empty response from Gemini",
 		Success: false,
 	}, fmt.Errorf("empty response from Gemini")

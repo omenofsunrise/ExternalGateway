@@ -19,17 +19,17 @@ type StreamEvent struct {
 }
 
 type Stream struct {
-	client  *Client
+	client  *GeminiClient
 	ctx     context.Context
 	events  chan StreamEvent
 	errChan chan error
 }
 
-func (c *Client) GenerateContentStream(ctx context.Context, prompt string, opts ...RequestOption) (*Stream, error) {
+func (c *GeminiClient) GenerateContentStream(ctx context.Context, prompt string, opts ...RequestOption) (*Stream, error) {
 	return c.GenerateContentStreamWithParts(ctx, []Part{{Text: prompt}}, opts...)
 }
 
-func (c *Client) GenerateContentStreamWithParts(ctx context.Context, parts []Part, opts ...RequestOption) (*Stream, error) {
+func (c *GeminiClient) GenerateContentStreamWithParts(ctx context.Context, parts []Part, opts ...RequestOption) (*Stream, error) {
 	req := &GenerateContentRequest{
 		Contents: []Content{
 			{
@@ -58,7 +58,7 @@ func (s *Stream) start(req *GenerateContentRequest) {
 	defer close(s.events)
 	defer close(s.errChan)
 
-	url := fmt.Sprintf("%s/models/%s:streamGenerateContent?key=%s", s.client.baseURL, s.client.model, s.client.apiKey)
+	url := fmt.Sprintf("%s/models/%s:streamGenerateContent?key=%s", s.client.BaseUrl, s.client.Model, s.client.ApiKey)
 
 	jsonData, err := json.Marshal(req)
 	if err != nil {
@@ -73,7 +73,7 @@ func (s *Stream) start(req *GenerateContentRequest) {
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := s.client.httpClient.Do(httpReq)
+	resp, err := s.client.HttpClient.Do(httpReq)
 	if err != nil {
 		s.errChan <- fmt.Errorf("failed to call Gemini API: %w", err)
 		return
@@ -137,7 +137,7 @@ func (s *Stream) Errors() <-chan error {
 	return s.errChan
 }
 
-func (c *Client) CollectStreamText(stream *Stream) (string, error) {
+func (c *GeminiClient) CollectStreamText(stream *Stream) (string, error) {
 	var fullText string
 
 	for {

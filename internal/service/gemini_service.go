@@ -15,11 +15,11 @@ type GeminiServiceConfig struct {
 }
 
 type GeminiService struct {
-	geminiClient *gemini.Client
+	geminiClient *gemini.GeminiClient
 	config       *GeminiServiceConfig
 }
 
-func NewGeminiService(client *gemini.Client, config *GeminiServiceConfig) *GeminiService {
+func NewGeminiService(client *gemini.GeminiClient, config *GeminiServiceConfig) *GeminiService {
 	if config == nil {
 		config = &GeminiServiceConfig{
 			Temperature: 0.7,

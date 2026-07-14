@@ -4,61 +4,53 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"external-gateway/internal/adapter/common"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 )
 
-type Client struct {
-	apiKey     string
-	model      string
-	httpClient *http.Client
-	baseURL    string
+type GeminiClient struct {
+	*common.BaseAIClient
 }
 
-func NewClient(apiKey, model string, opts ...ClientOption) *Client {
-	client := &Client{
-		apiKey:  apiKey,
-		model:   model,
-		baseURL: "https://generativelanguage.googleapis.com/v1beta",
-		httpClient: &http.Client{
-			Timeout: 60 * time.Second,
-		},
-	}
+func NewClient(apiKey, model string, opts ...ClientOption) *GeminiClient {
+	httpClient := &http.Client{Timeout: 60 * time.Second}
+	client := common.NewBaseAIClient(httpClient, apiKey, "https://generativelanguage.googleapis.com/v1beta", model)
 
 	for _, opt := range opts {
 		opt(client)
 	}
 
-	return client
+	return &GeminiClient{BaseAIClient: client}
 }
 
-type ClientOption func(*Client)
+type ClientOption func(*common.BaseAIClient)
 
 func WithHTTPClient(httpClient *http.Client) ClientOption {
-	return func(c *Client) {
-		c.httpClient = httpClient
+	return func(c *common.BaseAIClient) {
+		c.BaseClient.HttpClient = httpClient
 	}
 }
 
 func WithBaseURL(baseURL string) ClientOption {
-	return func(c *Client) {
-		c.baseURL = baseURL
+	return func(c *common.BaseAIClient) {
+		c.BaseClient.BaseUrl = baseURL
 	}
 }
 
 func WithTimeout(timeout time.Duration) ClientOption {
-	return func(c *Client) {
-		c.httpClient.Timeout = timeout
+	return func(c *common.BaseAIClient) {
+		c.BaseClient.HttpClient.Timeout = timeout
 	}
 }
 
-func (c *Client) GenerateContent(ctx context.Context, prompt string, opts ...RequestOption) (*GenerateContentResponse, error) {
+func (c *GeminiClient) GenerateContent(ctx context.Context, prompt string, opts ...RequestOption) (*GenerateContentResponse, error) {
 	return c.GenerateContentWithParts(ctx, []Part{{Text: prompt}}, opts...)
 }
 
-func (c *Client) GenerateContentWithParts(ctx context.Context, parts []Part, opts ...RequestOption) (*GenerateContentResponse, error) {
+func (c *GeminiClient) GenerateContentWithParts(ctx context.Context, parts []Part, opts ...RequestOption) (*GenerateContentResponse, error) {
 	req := &GenerateContentRequest{
 		Contents: []Content{
 			{
@@ -75,7 +67,7 @@ func (c *Client) GenerateContentWithParts(ctx context.Context, parts []Part, opt
 	return c.generateContent(ctx, req)
 }
 
-func (c *Client) GenerateContentWithHistory(ctx context.Context, history []Content, newParts []Part, opts ...RequestOption) (*GenerateContentResponse, error) {
+func (c *GeminiClient) GenerateContentWithHistory(ctx context.Context, history []Content, newParts []Part, opts ...RequestOption) (*GenerateContentResponse, error) {
 	contents := make([]Content, len(history)+1)
 	copy(contents, history)
 	contents[len(history)] = Content{
@@ -94,8 +86,8 @@ func (c *Client) GenerateContentWithHistory(ctx context.Context, history []Conte
 	return c.generateContent(ctx, req)
 }
 
-func (c *Client) generateContent(ctx context.Context, req *GenerateContentRequest) (*GenerateContentResponse, error) {
-	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", c.baseURL, c.model, c.apiKey)
+func (c *GeminiClient) generateContent(ctx context.Context, req *GenerateContentRequest) (*GenerateContentResponse, error) {
+	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", c.BaseClient.BaseUrl, c.Model, c.BaseClient)
 
 	jsonData, err := json.Marshal(req)
 	if err != nil {
@@ -108,7 +100,7 @@ func (c *Client) generateContent(ctx context.Context, req *GenerateContentReques
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.HttpClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call Gemini API: %w", err)
 	}
@@ -142,7 +134,7 @@ func (c *Client) generateContent(ctx context.Context, req *GenerateContentReques
 	return &geminiResp, nil
 }
 
-func (c *Client) GenerateContentWithFunctions(
+func (c *GeminiClient) GenerateContentWithFunctions(
 	ctx context.Context,
 	prompt string,
 	functions []Tool,
@@ -152,7 +144,7 @@ func (c *Client) GenerateContentWithFunctions(
 	return c.GenerateContent(ctx, prompt, allOpts...)
 }
 
-func (c *Client) HandleFunctionCall(
+func (c *GeminiClient) HandleFunctionCall(
 	originalResponse *GenerateContentResponse,
 	functionName string,
 	result map[string]interface{},
@@ -203,7 +195,7 @@ func (c *Client) HandleFunctionCall(
 	}, nil
 }
 
-func (c *Client) HandleFunctionCallWithHistory(
+func (c *GeminiClient) HandleFunctionCallWithHistory(
 	history []Content,
 	originalResponse *GenerateContentResponse,
 	functionName string,
@@ -253,7 +245,7 @@ func (c *Client) HandleFunctionCallWithHistory(
 	}, nil
 }
 
-func (c *Client) CountTokens(ctx context.Context, prompt string, opts ...RequestOption) (int32, error) {
+func (c *GeminiClient) CountTokens(ctx context.Context, prompt string, opts ...RequestOption) (int32, error) {
 	req := &CountTokensRequest{
 		Contents: []Content{
 			{
@@ -279,14 +271,14 @@ func (c *Client) CountTokens(ctx context.Context, prompt string, opts ...Request
 		return 0, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/models/%s:countTokens?key=%s", c.baseURL, c.model, c.apiKey)
+	url := fmt.Sprintf("%s/models/%s:countTokens?key=%s", c.BaseUrl, c.Model, c.ApiKey)
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return 0, fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.HttpClient.Do(httpReq)
 	if err != nil {
 		return 0, fmt.Errorf("failed to call Gemini API: %w", err)
 	}
@@ -313,7 +305,7 @@ func (c *Client) CountTokens(ctx context.Context, prompt string, opts ...Request
 	return tokenResp.TotalTokens, nil
 }
 
-func (c *Client) CountTokensWithContent(ctx context.Context, content Content, opts ...RequestOption) (int32, error) {
+func (c *GeminiClient) CountTokensWithContent(ctx context.Context, content Content, opts ...RequestOption) (int32, error) {
 	req := &CountTokensRequest{
 		Contents: []Content{content},
 	}
@@ -334,14 +326,14 @@ func (c *Client) CountTokensWithContent(ctx context.Context, content Content, op
 		return 0, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/models/%s:countTokens?key=%s", c.baseURL, c.model, c.apiKey)
+	url := fmt.Sprintf("%s/models/%s:countTokens?key=%s", c.BaseUrl, c.Model, c.ApiKey)
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return 0, fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.HttpClient.Do(httpReq)
 	if err != nil {
 		return 0, fmt.Errorf("failed to call Gemini API: %w", err)
 	}
@@ -368,19 +360,19 @@ func (c *Client) CountTokensWithContent(ctx context.Context, content Content, op
 	return tokenResp.TotalTokens, nil
 }
 
-func (c *Client) EmbedContent(ctx context.Context, text string) ([]float32, error) {
+func (c *GeminiClient) EmbedContent(ctx context.Context, text string) ([]float32, error) {
 	return c.EmbedContentWithConfig(ctx, Content{
 		Parts: []Part{{Text: text}},
 	}, "")
 }
 
-func (c *Client) EmbedContentWithConfig(
+func (c *GeminiClient) EmbedContentWithConfig(
 	ctx context.Context,
 	content Content,
 	taskType EmbeddingTaskType,
 ) ([]float32, error) {
 	req := &EmbedContentRequest{
-		Model:    c.model,
+		Model:    c.Model,
 		Content:  content,
 		TaskType: taskType,
 	}
@@ -390,14 +382,14 @@ func (c *Client) EmbedContentWithConfig(
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/models/%s:embedContent?key=%s", c.baseURL, c.model, c.apiKey)
+	url := fmt.Sprintf("%s/models/%s:embedContent?key=%s", c.BaseUrl, c.Model, c.ApiKey)
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.httpClient.Do(httpReq)
+	resp, err := c.HttpClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call Gemini API: %w", err)
 	}
@@ -428,7 +420,7 @@ func (c *Client) EmbedContentWithConfig(
 	return embedResp.Embedding.Values, nil
 }
 
-func (c *Client) GetTextFromResponse(resp *GenerateContentResponse) string {
+func (c *GeminiClient) GetTextFromResponse(resp *GenerateContentResponse) string {
 	if len(resp.Candidates) == 0 {
 		return ""
 	}
@@ -440,7 +432,7 @@ func (c *Client) GetTextFromResponse(resp *GenerateContentResponse) string {
 	return ""
 }
 
-func (c *Client) GetFunctionCallsFromResponse(resp *GenerateContentResponse) []FunctionCall {
+func (c *GeminiClient) GetFunctionCallsFromResponse(resp *GenerateContentResponse) []FunctionCall {
 	var calls []FunctionCall
 	if len(resp.Candidates) == 0 {
 		return calls
@@ -453,7 +445,7 @@ func (c *Client) GetFunctionCallsFromResponse(resp *GenerateContentResponse) []F
 	return calls
 }
 
-func (c *Client) GetAllTextFromResponse(resp *GenerateContentResponse) []string {
+func (c *GeminiClient) GetAllTextFromResponse(resp *GenerateContentResponse) []string {
 	var texts []string
 	for _, candidate := range resp.Candidates {
 		for _, part := range candidate.Content.Parts {
@@ -465,14 +457,14 @@ func (c *Client) GetAllTextFromResponse(resp *GenerateContentResponse) []string 
 	return texts
 }
 
-func (c *Client) GetFinishReason(resp *GenerateContentResponse) (FinishReason, error) {
+func (c *GeminiClient) GetFinishReason(resp *GenerateContentResponse) (FinishReason, error) {
 	if len(resp.Candidates) == 0 {
 		return "", fmt.Errorf("no candidates in response")
 	}
 	return resp.Candidates[0].FinishReason, nil
 }
 
-func (c *Client) IsResponseBlocked(resp *GenerateContentResponse) bool {
+func (c *GeminiClient) IsResponseBlocked(resp *GenerateContentResponse) bool {
 	if resp.PromptFeedback != nil && resp.PromptFeedback.BlockReason != "" {
 		return true
 	}
@@ -482,7 +474,7 @@ func (c *Client) IsResponseBlocked(resp *GenerateContentResponse) bool {
 	return false
 }
 
-func (c *Client) BatchGenerateContent(ctx context.Context, prompts []string, opts ...RequestOption) ([]*GenerateContentResponse, error) {
+func (c *GeminiClient) BatchGenerateContent(ctx context.Context, prompts []string, opts ...RequestOption) ([]*GenerateContentResponse, error) {
 	responses := make([]*GenerateContentResponse, len(prompts))
 	for i, prompt := range prompts {
 		resp, err := c.GenerateContent(ctx, prompt, opts...)
@@ -494,7 +486,7 @@ func (c *Client) BatchGenerateContent(ctx context.Context, prompts []string, opt
 	return responses, nil
 }
 
-func (c *Client) GenerateContentWithRetry(
+func (c *GeminiClient) GenerateContentWithRetry(
 	ctx context.Context,
 	prompt string,
 	maxRetries int,
